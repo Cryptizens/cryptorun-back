@@ -24,12 +24,13 @@ contract CryptoRun is usingOraclize {
   // keep track of the total amount donated, we record it with a dedicated
   // variable that we will increase gradually at each donation. Note that we
   // could not add the values in the mapping of individual donations, because
-  // a mapping cannot be iterated on (we could revert to a more complicated
-  // scheme with arrays, but we stick to our simple single variable).
-  uint public totalFundsDonated = 0;
+  // a mapping cannot be iterated on for additions or other operations (we
+  // could revert to a more complicated scheme with arrays, but we stick to
+  // our simple single variable).
+  uint public totalDonation = 0;
   // Keep track of all individual donations, so that donors can withdraw their
   // funds if the challenge fails
-  mapping public (address => uint) fundsDonatedByDonor;
+  mapping public (address => uint) donorsDonations;
 
   /*
       EVENTS - for broadcasting a set of logs that we can listen to
@@ -37,9 +38,9 @@ contract CryptoRun is usingOraclize {
   // The contract has been deployed, and the challenge can start
   event ChallengeStarted(address deployerAddress);
   // A new donor has contributed by sending funds
-  event FundsDonated(address donorAddress, uint donationAmount, uint totalFundsDonated);
+  event NewDonation(address donorAddress, uint donationAmount, uint totalDonation);
   // The challenge status has been refreshed
-  event ChallengeStatusRefreshed(bytes32 currentStatus);
+  event ChallengeStatusRefreshed(bytes32 latestStatus);
   // The challenge has been accomplished
   event ChallengeAccomplished();
   // The challenge has been closed (after all donations have been withdrawn)
@@ -48,20 +49,22 @@ contract CryptoRun is usingOraclize {
   event ChallengeFailed();
   // The funds are available for BeCode to withdraw them (will only be broadcast
   // if the challenge is successful)
-  event FundsAvailableForBeCodeWithdrawal(uint fundsAmount);
+  event DonationAvailableForBeCodeWithdrawal(uint totalDonation);
   // BeCode has withdrawn the funds
-  event FundsWithdrawnByBeCode(address beCodeAddress, uint fundsAmount);
+  event DonationWithdrawnByBeCode(address beCodeAddress, uint totalDonation);
   // The funds are available for the donors to withdraw (will only be broadcast
   // if the challenge has failed)
-  event FundsAvailableForDonorsWithdrawal(uint fundsAmount);
+  event DonationsAvailableForDonorsWithdrawal(uint totalDonation);
   // One of the donors has withdrawn their funds
-  event FundsWithdrawnByDonor(address donorAddress, uint fundsAmount);
+  event DonationWithdrawnByDonor(address donorAddress, uint donorDonation);
+  // Oraclize technical event
+  event newOraclizeQuery(string description);
 
   /*
       FUNCTION MODIFIERS - to set specific permissions for contract functions
   */
   // For functions that can only by executed by the owner of the contract, who
-  // will be the person that deploys it (Thomas)
+  // will be the person that deploys it (Thomas from Cryptizens.io)
   modifier onlyByOwner {
       require(msg.sender == ownerAddress);
       _;
@@ -111,15 +114,14 @@ contract CryptoRun is usingOraclize {
 
   // The fallback function called anytime someone sends value to the contract
   function donate() payable public onlyWhenOngoing {
-    // Add the donation to the individual donor balance (so a donor can donate
-    // multiple times if required)
-    uint currentDonorDonation = fundsDonatedByDonor(msg.sender);
-    fundsDonatedByDonor(msg.sender) = currentDonorDonation + msg.value;
+    // Add the individual donor balance
+    uint currentDonorDonation = donorsDonations(msg.sender);
+    donorsDonations(msg.sender) = currentDonorDonation + msg.value;
     // Increase the total funds donated
-    uint currentTotalFundsDonated = totalFundsDonated;
-    totalFundsDonated = currentTotalFundsDonated + msg.value;
+    uint currentTotalDonation = totalDonation;
+    totalDonation = currentTotalDonation + msg.value;
     // Log the donation, along with the new total value of funds donated
-    FundsDonated(msg.send, msg.value, totalFundsDonated);
+    NewDonation(msg.sender, msg.value, totalDonation);
   }
 
   // The querying function that will trigger the Oracle to check whether the
@@ -127,23 +129,45 @@ contract CryptoRun is usingOraclize {
   function refreshChallengeStatus() public onlyByOrganizers onlyWhenOngoing {
     // Add modifier on time (cannot be called before xxx)
     // Call to the Oraclize API
+    if (oraclize_getPrice("URL") > this.balance) {
+        newOraclizeQuery("Oraclize query NOT sent, balance too low");
+    } else {
+        newOraclizeQuery("Oraclize query sent, standing by...");
+        oraclize_query("URL", "json(LAMBDA_URL).challenge.status");
+    }
   }
 
   // The callback function that will be invoked by the Oracle after it has
   // fetched the latest challenge status
   function __callback(bytes32 _queryId, string _result) public onlyByOracle {
     // Assert whether success or not, and update contract state accordingly
+    latestStatus = result;
+
+    ChallengeStatusRefreshed(bytes32 latestStatus);
+
+    if (keccak256(latestStatus) == keccak256('ongoing')) {
+      challengeStatus = 'ongoing';
+    } else if (keccak256(latestStatus) == keccak256('accomplished')) {
+      challengeStatus = 'accomplished';
+      ChallengeAccomplished();
+      DonationAvailableForBeCodeWithdrawal(totalDonation);
+    } else if (keccak256(latestStatus) == keccak256('failed')) {
+      challengeStatus = 'failed';
+      ChallengeFailed();
+    } else {
+      throw;
+    }
   }
 
   // The BeCode funds withdrawal function - note that we use a withdrawal pattern
   // here (the transfer must be triggered by the funds claimer, and will not
   // be triggered automatically by the contract), as it is known to be much
   // safer (cf. Solidity documentation)
-  function withDrawAllFunds() public onlyByBeCode onlyWhenAccomplished {
+  function withDrawAllDonations() public onlyByBeCode onlyWhenAccomplished {
     // Close the challenge
     challengeStatus = 'closed';
     // Broadcast the closing and withdrawal events
-    FundsWithdrawnByBeCode(msg.sender, this.balance);
+    DonationWithdrawnByBeCode(msg.sender, this.balance);
     ChallengeClosed();
     // Transfer the remaning contract balance to BeCode
     msg.sender.transfer(this.balance);
@@ -151,13 +175,13 @@ contract CryptoRun is usingOraclize {
 
   // The individual donors withdrawal functions (so that they can withdraw
   // their value if the challenge is a failure)
-  function withdrawIndividualFunds() public onlyWhenFailed {
+  function withdrawDonorDonation() public onlyWhenFailed {
     // Retrieve the amount already contributed
-    uint fundsDonated = fundsDonatedByDonor[msg.sender]
+    uint donation = donorsDonations[msg.sender]
     // Set this amount to zero
-    fundsDonatedByDonor[msg.sender] = 0;
+    donorsDonations[msg.sender] = 0;
     // Broadcast the withdrawal event
-    FundsWithdrawnByDonor(msg.sender, fundsDonated);
+    DonationWithdrawnByDonor(msg.sender, donation);
     // Transfer the funds to the individual donor. Note that the very last donor
     // to withdraw her funds will meet a contract balance that is lower than
     // the funds she will have contributed. This is because the balance has
@@ -166,8 +190,8 @@ contract CryptoRun is usingOraclize {
     // a little conditional flow here. Otherwise we would end up trying to
     // transfer an amount greater than the balance and it would trigger an
     // error, thereby actually locking the funds on the contract!
-    if (this.balance => fundsDonated) {
-      msg.sender.transfer(fundsDonated);
+    if (this.balance => donation) {
+      msg.sender.transfer(donation);
     } else {
       msg.sender.transfer(this.balance);
     }
