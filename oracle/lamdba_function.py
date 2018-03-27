@@ -94,7 +94,7 @@ def activity_satisfies_challenge(activity):
     good_type = activity_satisfies_type(activity)
     good_distance = activity_satisfies_distance(activity)
     good_location = activity_satisfies_location(activity)
-    return good_type & good_distance & good_location
+    return ( good_type & good_distance & good_location )
 
 # Evaluate if an activity if of the 'Run' type
 def activity_satisfies_type(activity):
