@@ -1,4 +1,4 @@
-prama solidity ^0.4.19
+pragma solidity ^0.4.21;
 
 // Import the Oraclize contract code so we can inherit from it
 import "github.com/oraclize/ethereum-api/oraclizeAPI.sol";
@@ -10,7 +10,9 @@ contract CryptoRun is usingOraclize {
   // The address of the contract owner (Thomas), set when the contract is deployed
   address public ownerAddress = msg.sender;
   // The address of BeCode, the non-profit beneficiary that will receive the funds
-  address public beCodeAddress = '';
+  // TODO: use the real address - currently a Rinkeby Testnet address belonging
+  // to Thomas for development & testing purposes
+  address public beCodeAddress = 0x9D55C8FeA20dea8134ade26Ac494C66BABe6D5F4;
   // The status of the challenge, initialized at deployment to 'ongoing'.
   // Other statuses are 'accomplished', 'closed' and 'failed'
   bytes32 public challengeStatus = 'ongoing';
@@ -30,7 +32,7 @@ contract CryptoRun is usingOraclize {
   uint public totalDonation = 0;
   // Keep track of all individual donations, so that donors can withdraw their
   // funds if the challenge fails
-  mapping public (address => uint) donorsDonations;
+  mapping (address => uint) public donorsDonations;
 
   /*
       EVENTS - for broadcasting a set of logs that we can listen to
@@ -40,7 +42,7 @@ contract CryptoRun is usingOraclize {
   // A new donor has contributed by sending funds
   event NewDonation(address donorAddress, uint donationAmount, uint totalDonation);
   // The challenge status has been refreshed
-  event ChallengeStatusRefreshed(bytes32 latestStatus);
+  event ChallengeStatusRefreshed(string latestStatus);
   // The challenge has been accomplished
   event ChallengeAccomplished();
   // The challenge has been closed (after all donations have been withdrawn)
@@ -58,7 +60,8 @@ contract CryptoRun is usingOraclize {
   // One of the donors has withdrawn their funds
   event DonationWithdrawnByDonor(address donorAddress, uint donorDonation);
   // Oraclize technical event
-  event newOraclizeQuery(string description);
+  event NewOraclizeQuery(string description);
+  event NewOraclizeCallback(bytes32 _queryId);
 
   /*
       FUNCTION MODIFIERS - to set specific permissions for contract functions
@@ -109,19 +112,19 @@ contract CryptoRun is usingOraclize {
   */
   // The constructor functions, called when the contract is deployed
   function CryptoRun() {
-    ChallengeStarted(msg.sender);
+    emit ChallengeStarted(msg.sender);
   }
 
   // The fallback function called anytime someone sends value to the contract
   function donate() payable public onlyWhenOngoing {
     // Add the individual donor balance
-    uint currentDonorDonation = donorsDonations(msg.sender);
-    donorsDonations(msg.sender) = currentDonorDonation + msg.value;
+    uint currentDonorDonation = donorsDonations[msg.sender];
+    donorsDonations[msg.sender] = currentDonorDonation + msg.value;
     // Increase the total funds donated
     uint currentTotalDonation = totalDonation;
     totalDonation = currentTotalDonation + msg.value;
     // Log the donation, along with the new total value of funds donated
-    NewDonation(msg.sender, msg.value, totalDonation);
+    emit NewDonation(msg.sender, msg.value, totalDonation);
   }
 
   // The querying function that will trigger the Oracle to check whether the
@@ -129,10 +132,10 @@ contract CryptoRun is usingOraclize {
   function refreshChallengeStatus() public onlyByOrganizers onlyWhenOngoing {
     // Add modifier on time (cannot be called before xxx)
     // Call to the Oraclize API
-    if (oraclize_getPrice("URL") > this.balance) {
-        newOraclizeQuery("Oraclize query NOT sent, balance too low");
+    if (oraclize_getPrice("URL") > address(this).balance) {
+        emit NewOraclizeQuery("Oraclize query NOT sent, balance too low");
     } else {
-        newOraclizeQuery("Oraclize query sent, standing by...");
+        emit NewOraclizeQuery("Oraclize query sent, standing by...");
         oraclize_query("URL", "json(https://pgy2ax76f9.execute-api.eu-central-1.amazonaws.com/prod/CryptoRun).challenge_status");
     }
   }
@@ -141,21 +144,22 @@ contract CryptoRun is usingOraclize {
   // fetched the latest challenge status
   function __callback(bytes32 _queryId, string _result) public onlyByOracle {
     // Assert whether success or not, and update contract state accordingly
-    latestStatus = result;
+    string memory latestStatus = _result;
 
-    ChallengeStatusRefreshed(bytes32 latestStatus);
+    emit NewOraclizeCallback(_queryId);
+    emit ChallengeStatusRefreshed(latestStatus);
 
     if (keccak256(latestStatus) == keccak256('ongoing')) {
       challengeStatus = 'ongoing';
     } else if (keccak256(latestStatus) == keccak256('accomplished')) {
       challengeStatus = 'accomplished';
-      ChallengeAccomplished();
-      DonationAvailableForBeCodeWithdrawal(totalDonation);
+      emit ChallengeAccomplished();
+      emit DonationAvailableForBeCodeWithdrawal(totalDonation);
     } else if (keccak256(latestStatus) == keccak256('failed')) {
       challengeStatus = 'failed';
-      ChallengeFailed();
+      emit ChallengeFailed();
     } else {
-      throw;
+      revert();
     }
   }
 
@@ -167,21 +171,21 @@ contract CryptoRun is usingOraclize {
     // Close the challenge
     challengeStatus = 'closed';
     // Broadcast the closing and withdrawal events
-    DonationWithdrawnByBeCode(msg.sender, this.balance);
-    ChallengeClosed();
+    emit DonationWithdrawnByBeCode(msg.sender, address(this).balance);
+    emit ChallengeClosed();
     // Transfer the remaning contract balance to BeCode
-    msg.sender.transfer(this.balance);
+    msg.sender.transfer(address(this).balance);
   }
 
   // The individual donors withdrawal functions (so that they can withdraw
   // their value if the challenge is a failure)
   function withdrawDonorDonation() public onlyWhenFailed {
     // Retrieve the amount already contributed
-    uint donation = donorsDonations[msg.sender]
+    uint donation = donorsDonations[msg.sender];
     // Set this amount to zero
     donorsDonations[msg.sender] = 0;
     // Broadcast the withdrawal event
-    DonationWithdrawnByDonor(msg.sender, donation);
+    emit DonationWithdrawnByDonor(msg.sender, donation);
     // Transfer the funds to the individual donor. Note that the very last donor
     // to withdraw her funds will meet a contract balance that is lower than
     // the funds she will have contributed. This is because the balance has
@@ -190,10 +194,10 @@ contract CryptoRun is usingOraclize {
     // a little conditional flow here. Otherwise we would end up trying to
     // transfer an amount greater than the balance and it would trigger an
     // error, thereby actually locking the funds on the contract!
-    if (this.balance => donation) {
+    if (address(this).balance > donation) {
       msg.sender.transfer(donation);
     } else {
-      msg.sender.transfer(this.balance);
+      msg.sender.transfer(address(this).balance);
     }
   }
 }
