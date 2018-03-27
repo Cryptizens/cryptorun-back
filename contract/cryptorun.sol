@@ -15,7 +15,7 @@ contract CryptoRun is usingOraclize {
   address public beCodeAddress = 0x9D55C8FeA20dea8134ade26Ac494C66BABe6D5F4;
   // The status of the challenge, initialized at deployment to 'ongoing'.
   // Other statuses are 'accomplished', 'closed' and 'failed'
-  bytes32 public challengeStatus = 'ongoing';
+  string public challengeStatus = 'ongoing';
   // Another interesting variable here is the actual amount of funds that are
   // locked on the contract after donation. In normal contracts, this variable
   // is implicitly available under the name 'balance'. However here, since we
@@ -111,12 +111,15 @@ contract CryptoRun is usingOraclize {
       FUNCTIONS - to implement the behavior of the contract
   */
   // The constructor functions, called when the contract is deployed
-  function CryptoRun() {
+  function CryptoRun() public {
     emit ChallengeStarted(msg.sender);
   }
 
   // The fallback function called anytime someone sends value to the contract
-  function donate() payable public onlyWhenOngoing {
+  // This is the 'donate()' function. But we cannot call it donate() because
+  // we need a nameless function to be able to send Ether directly from any
+  // wallet without having to know about the contract interface.
+  function () public payable onlyWhenOngoing {
     // Add the individual donor balance
     uint currentDonorDonation = donorsDonations[msg.sender];
     donorsDonations[msg.sender] = currentDonorDonation + msg.value;
