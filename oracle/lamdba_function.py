@@ -83,11 +83,11 @@ FAILED_STATUS = 'failed'
 
 # Retrieve all of latest Thomas' activities from Strava
 def fetch_latest_activities_from_strava():
-    # response = requests.get(url, headers=HEADERS)
-    # activities = json.loads(response.content)
-    # return activities
+    response = requests.get(url, headers=HEADERS)
+    activities = json.loads(response.content)
+    return activities
     # Commented out: for testing purposes, load activities from local machine
-    return json.load(open('sample_activities.json'))
+    # return json.load(open('sample_activities.json'))
 
 # Evaluate if an activity meets the conditions of the challenge
 def activity_satisfies_challenge(activity):
@@ -190,4 +190,4 @@ def lambda_handler(event, context):
     return response
 
 # For local development purposes
-print(lambda_handler('',''))
+# print(lambda_handler('',''))
