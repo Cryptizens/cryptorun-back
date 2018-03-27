@@ -83,7 +83,7 @@ FAILED_STATUS = 'failed'
 
 # Retrieve all of latest Thomas' activities from Strava
 def fetch_latest_activities_from_strava():
-    response = requests.get(url, headers=HEADERS)
+    response = requests.get(STRAVA_API_ENDPOINT, headers=HEADERS)
     activities = json.loads(response.content)
     return activities
     # Commented out: for testing purposes, load activities from local machine
