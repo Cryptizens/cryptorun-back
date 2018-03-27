@@ -133,7 +133,7 @@ contract CryptoRun is usingOraclize {
         newOraclizeQuery("Oraclize query NOT sent, balance too low");
     } else {
         newOraclizeQuery("Oraclize query sent, standing by...");
-        oraclize_query("URL", "json(LAMBDA_URL).challenge.status");
+        oraclize_query("URL", "json(LAMBDA_URL).challenge_status");
     }
   }
 
