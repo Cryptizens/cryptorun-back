@@ -111,13 +111,13 @@ def activity_satisfies_location(activity):
     start_coord = activity[START_LAT_LONG_FIELD]
     end_coord   = activity[END_LAT_LONG_FIELD]
 
-    start_satisfies_location = coord_within_allowed_range(start_coord[0], start_coord[1])
-    end_satisfies_location   = coord_within_allowed_range(end_coord[0], end_coord[1])
+    start_satisfies_location = coords_within_allowed_range(start_coord[0], start_coord[1])
+    end_satisfies_location   = coords_within_allowed_range(end_coord[0], end_coord[1])
 
     return ( start_satisfies_location & end_satisfies_location)
 
 # Helper method to evaluate one specific point
-def coord_within_allowed_range(lat, lon):
+def coords_within_allowed_range(lat, lon):
     lat_within_bounds = ((AUTHORIZED_LAT_RANGE[0] <= lat) & (lat <= AUTHORIZED_LAT_RANGE[1]))
     lon_within_bounds = ((AUTHORIZED_LON_RANGE[0] <= lon) & (lon <= AUTHORIZED_LON_RANGE[1]))
     return ( lat_within_bounds & lon_within_bounds )
