@@ -20,6 +20,11 @@ STRAVA_API_TOKEN = os.environ['strava_api_token']
 HEADERS = {
     'Authorization': 'Bearer ' + STRAVA_API_TOKEN
 }
+# Specific API data field names
+TYPE_FIELD = 'type'
+DISTANCE_FIELD = 'distance'
+START_LAT_LONG_FIELD = 'start_latlng'
+END_LAT_LONG_FIELD = 'end_latlng'
 
 
 ############################
@@ -29,7 +34,7 @@ HEADERS = {
 # How the challenge must be accomplished (running, obviously). This is just a
 # filter to avoid counting any of Thomas' biking activities recorded on Strava
 # to accidentally trigger the challenge accomplishment.
-ACTIVITY_TYPE = 'Run'
+REQUIRED_ACTIVITY_TYPE = 'Run'
 # The latest day until which the challenge can be attempted - we take ten more
 # days vs the 'official' challenge day to have some buffer in case of unforeseen
 # circumstances on the official day. The format is YYYY, MM, DD.
@@ -55,10 +60,21 @@ NE_BOUND_COORDS = {
     'lat': 50.9348927,
     'lon': 4.4871652
 }
-# (3) Resulting allowed range
-LAT_RANGE  = [ SW_BOUND_COORDS['lat'], NE_BOUND_COORDS['lat']]
-LON_RANGE = [ SW_BOUND_COORDS['lon'], NE_BOUND_COORDS['lon']]
+# (3) Resulting authorized ranges
+AUTHORIZED_LAT_RANGE  = [ SW_BOUND_COORDS['lat'], NE_BOUND_COORDS['lat']]
+AUTHORIZED_LON_RANGE = [ SW_BOUND_COORDS['lon'], NE_BOUND_COORDS['lon']]
 
+
+############################
+#### CHALLENGE STATUSES ####
+############################
+
+# In order to be sure that we pass only allowed statuses back to the Smart
+# Contract that will be querying this Oracle, we define them as constants
+ONGOING_STATUS = 'ongoing'
+ACCOMPLISHED_STATUS = 'accomplished'
+CLOSED_STATUS = 'closed'
+FAILED_STATUS = 'failed'
 
 ############################
 ##### AUXILIARY METHODS ####
@@ -81,18 +97,18 @@ def activity_satisfies_challenge(activity):
 
 # Evaluate if an activity if of the 'Run' type
 def activity_satisfies_type(activity):
-    return activity['type'] == ACTIVITY_TYPE
+    return activity[TYPE_FIELD] == REQUIRED_ACTIVITY_TYPE
 
 # Evaluate if the distance of an activity is equal or above the minimum
 # required distance for the challenge
 def activity_satisfies_distance(activity):
-    return activity['distance'] >= MIN_DISTANCE
+    return activity[DISTANCE_FIELD] >= MIN_DISTANCE
 
 # Evaluate if the start and end coordinates of an activity are within the
 # range allowed for the challenge (i.e., in the Brussels area)
 def activity_satisfies_location(activity):
-    start_coord = activity['start_latlng']
-    end_coord   = activity['end_latlng']
+    start_coord = activity[START_LAT_LONG_FIELD]
+    end_coord   = activity[END_LAT_LONG_FIELD]
 
     start_satisfies_location = coord_within_allowed_range(start_coord[0], start_coord[1])
     end_satisfies_location   = coord_within_allowed_range(end_coord[0], end_coord[1])
@@ -101,8 +117,8 @@ def activity_satisfies_location(activity):
 
 # Helper method to evaluate one specific point
 def coord_within_allowed_range(lat, lon):
-    lat_within_bounds = ((LAT_RANGE[0] <= lat) & (lat <= LAT_RANGE[1]))
-    lon_within_bounds = ((LON_RANGE[0] <= lon) & (lon <= LON_RANGE[1]))
+    lat_within_bounds = ((AUTHORIZED_LAT_RANGE[0] <= lat) & (lat <= AUTHORIZED_LAT_RANGE[1]))
+    lon_within_bounds = ((AUTHORIZED_LON_RANGE[0] <= lon) & (lon <= AUTHORIZED_LON_RANGE[1]))
     return ( lat_within_bounds & lon_within_bounds )
 
 # Helper method to check if challenge period is still ongoing
@@ -118,9 +134,9 @@ def lambda_handler(event, context):
     # Fetch recent activities from Strava
     activities = fetch_latest_activities_from_strava()
 
-    # Initially assume that the challenge is ongoing and that no activity
-    # satisfies the conditions.
-    challenge_status = 'ongoing'
+    # By default, initially assume that the challenge is ongoing and that no
+    # activity satisfies the conditions.
+    challenge_status = ONGOING_STATUS
     any_activity_satisfying_challenge = False
 
     # We use a very explicit way of looping across all activities here, to
@@ -143,16 +159,16 @@ def lambda_handler(event, context):
         # If one of the activities satisfies the conditions, the challenge is
         # accomplished!
         if any_activity_satisfying_challenge:
-            challenge_status = 'accomplished'
+            challenge_status = ACCOMPLISHED_STATUS
         # Else, the challenge is still ongoing
         else:
-            challenge_status = 'ongoing'
+            challenge_status = ONGOING_STATUS
     # If the challenge is over...
     else:
         # If one of the activities satisfies the conditions, it means the
         # challenge has been accomplished, and is now closed.
         if any_activity_satisfying_challenge:
-            challenge_status = 'closed'
+            challenge_status = CLOSED_STATUS
         # If no activity has been found satisfying the conditions, it means
         # the challenge was a failure. Note that this will be the end state
         # towards which the challenge will converge after a certain period of
@@ -160,7 +176,7 @@ def lambda_handler(event, context):
         # that the satisfying activity is no more part of the list...but by then
         # the funds will have been withdraw from the contract.
         else:
-            challenge_status = 'failed'
+            challenge_status = FAILED_STATUS
 
     # Finally, we build a proper HTTP response for the Smart Contract that has
     # been querying the endpoint
