@@ -133,7 +133,6 @@ contract CryptoRun is usingOraclize {
   // The querying function that will trigger the Oracle to check whether the
   // challenge has been accomplished
   function refreshChallengeStatus() public onlyByOrganizers onlyWhenOngoing {
-    // Add modifier on time (cannot be called before xxx)
     // Call to the Oraclize API
     if (oraclize_getPrice("URL") > address(this).balance) {
         emit NewOraclizeQuery("Oraclize query NOT sent, balance too low");

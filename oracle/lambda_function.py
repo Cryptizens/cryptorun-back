@@ -36,9 +36,9 @@ END_LAT_LONG_FIELD = 'end_latlng'
 # to accidentally trigger the challenge accomplishment.
 REQUIRED_ACTIVITY_TYPE = 'Run'
 # The latest day until which the challenge can be attempted - we take ten more
-# days vs the 'official' challenge day to have some buffer in case of unforeseen
-# circumstances on the official day. The format is YYYY, MM, DD.
-LAST_CHALLENGE_DAY = datetime(2018, 5, 29)
+# days vs the 'official' challenge day of May 20th to have some buffer in case
+# of unforeseen circumstances on the official day. The format is YYYY, MM, DD.
+LAST_CHALLENGE_DAY = datetime(2018, 5, 30)
 # The minimum distance that must be run for the challenge to be accomplished,
 # expressed in meters (Strava's reference unit for distances).
 MIN_DISTANCE = 60000
