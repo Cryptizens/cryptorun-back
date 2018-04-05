@@ -76,3 +76,13 @@ Let's envision all the worst scenarios.
 - Contract status update goes wrong: a 'failed' message from the Oracle does not lead to the right status update of the contract
 
 ## Doing things elegantly: tests automation
+
+### Setting up a Blockchain test environment with Solidity and Truffle
+
+### The special case of the Oracle: using Ethereum bridge
+
+### The test suite: 20 assertions to success
+
+## Next steps
+
+Did you enjoy reading this? Then certainly it would be nice if you could provide feedback to pressure-test the current contract implementation!
