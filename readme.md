@@ -19,6 +19,12 @@ The Oracle in charge of connecting with Strava runs on AWS Lambda with a Python 
 
 ## Testing the smart contract
 
+We use Truffle to perform all tests. Once you're done with the below setup, just run `truffle test test/cryptoRun.js` and enjoy the show.
+
+### Importing the Oraclize contract
+
+Note that since Truffle cannot read the Oraclize.sol file directly from GitHub, we have to import this contract locally and source it accordingly in the CryptoRun contract import statement (we use the version available [here](https://github.com/oraclize/ethereum-api/blob/master/oraclizeAPI_0.4.sol)). It is important that the Oraclize contract is named `usingOraclize.sol` so that Truffle knows it's this one that must be imported.
+
 ### Launching a local test Blockchain
 
 Make sure you have `ganache-cli` installed. Then run in a daemon window
