@@ -13,10 +13,9 @@ contract CryptoRun is usingOraclize {
    */
   // The address of the contract owner (Thomas), set when the contract is deployed
   address public ownerAddress = msg.sender;
-  // The address of BeCode, the non-profit beneficiary that will receive the funds
-  // TODO: use the real address - currently a Rinkeby Testnet address belonging
-  // to Thomas for development & testing purposes
-  address public beCodeAddress = 0x9D55C8FeA20dea8134ade26Ac494C66BABe6D5F4;
+  // The address of BeCode, the non-profit beneficiary that will receive the funds.
+  // Setup at contract construction.
+  address public beCodeAddress;
   // The status of the challenge, initialized at deployment to 'ongoing'.
   // Other statuses are 'accomplished', 'closed' and 'failed'
   string public challengeStatus = 'ongoing';
@@ -47,6 +46,8 @@ contract CryptoRun is usingOraclize {
   event NewDonation(address donorAddress, uint donationAmount, uint totalDonation);
   // The challenge status has been refreshed
   event ChallengeStatusRefreshed(string latestStatus);
+  // The challenge is still ongoing
+  event ChallengeOngoing();
   // The challenge has been accomplished
   event ChallengeAccomplished();
   // The challenge has been closed (after all donations have been withdrawn)
@@ -70,18 +71,6 @@ contract CryptoRun is usingOraclize {
   /*
       FUNCTION MODIFIERS - to set specific permissions for contract functions
   */
-  // For functions that can only by executed by the owner of the contract, who
-  // will be the person that deploys it (Thomas from Cryptizens.io)
-  modifier onlyByOwner {
-      require(msg.sender == ownerAddress);
-      _;
-  }
-  // For functions that can only be executed by BeCode, the non-profit
-  // beneficiary of the funds
-  modifier onlyByBeCode {
-      require(msg.sender == beCodeAddress);
-      _;
-  }
   // For functions that can only be executed either the owner or by BeCode
   modifier onlyByOrganizers {
       require((msg.sender == ownerAddress) || (msg.sender == beCodeAddress));
@@ -115,7 +104,10 @@ contract CryptoRun is usingOraclize {
       FUNCTIONS - to implement the behavior of the contract
   */
   // The constructor functions, called when the contract is deployed
-  function CryptoRun() public {
+  function CryptoRun(address _beCodeAddress) public {
+    // For testing purposes only
+    OAR = OraclizeAddrResolverI(0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475);
+    beCodeAddress = _beCodeAddress;
     emit ChallengeStarted(msg.sender);
   }
 
@@ -142,7 +134,10 @@ contract CryptoRun is usingOraclize {
         emit NewOraclizeQuery("Oraclize query NOT sent, balance too low");
     } else {
         emit NewOraclizeQuery("Oraclize query sent, standing by...");
-        oraclize_query("URL", "json(https://pgy2ax76f9.execute-api.eu-central-1.amazonaws.com/prod/CryptoRun).challenge_status");
+        // Production endpoint
+        // oraclize_query("URL", "json(https://pgy2ax76f9.execute-api.eu-central-1.amazonaws.com/prod/CryptoRun).challenge_status");
+        // Test endpoint
+        oraclize_query("URL", "json(https://wqy7ols8ob.execute-api.eu-central-1.amazonaws.com/prod/CryptoRunTest).challenge_status");
     }
   }
 
@@ -157,6 +152,7 @@ contract CryptoRun is usingOraclize {
 
     if (keccak256(latestStatus) == keccak256('ongoing')) {
       challengeStatus = 'ongoing';
+      emit ChallengeOngoing();
     } else if (keccak256(latestStatus) == keccak256('accomplished')) {
       challengeStatus = 'accomplished';
       emit ChallengeAccomplished();
@@ -173,14 +169,14 @@ contract CryptoRun is usingOraclize {
   // here (the transfer must be triggered by the funds claimer, and will not
   // be triggered automatically by the contract), as it is known to be much
   // safer (cf. Solidity documentation)
-  function withDrawAllDonations() public onlyByBeCode onlyWhenAccomplished {
+  function withDrawAllDonations() public onlyByOrganizers onlyWhenAccomplished {
     // Close the challenge
     challengeStatus = 'closed';
     // Broadcast the closing and withdrawal events
     emit DonationWithdrawnByBeCode(msg.sender, address(this).balance);
     emit ChallengeClosed();
     // Transfer the remaning contract balance to BeCode
-    msg.sender.transfer(address(this).balance);
+    beCodeAddress.transfer(address(this).balance);
   }
 
   // The individual donors withdrawal functions (so that they can withdraw
@@ -205,5 +201,10 @@ contract CryptoRun is usingOraclize {
     } else {
       msg.sender.transfer(address(this).balance);
     }
+  }
+
+  // Get the current donation for a given donor address
+  function donorDonations(address _donorAddress) public constant returns(uint) {
+    return donorsDonations[_donorAddress];
   }
 }
