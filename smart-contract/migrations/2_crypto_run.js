@@ -1,0 +1,5 @@
+var CryptoRun = artifacts.require("./CryptoRun.sol");
+
+module.exports = function(deployer) {
+  deployer.deploy(CryptoRun);
+};
