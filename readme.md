@@ -18,7 +18,7 @@ The smart contract lives at address xxxx, it can be consulted [here on Etherscan
 The Oracle in charge of connecting with Strava runs on AWS Lambda with a Python 2.7 runtime.
 
 ### Test Oracle
-A exceedingly simple dummy Oracle for the Truffle test suite. This Lambda has the same interface as the real Oracle, but the status that it returns can easily be switched as it is read from an environment variable. We use the aws-cli to directly update this environment variable during the tests, to fake the evolution of the challenge status. 
+A exceedingly simple dummy Oracle for the Truffle test suite. This Lambda has the same interface as the real Oracle, but the status that it returns can easily be switched as it is read from an environment variable. We use the aws-cli to directly update this environment variable during the tests, to fake the evolution of the challenge status.
 
 ## Testing the smart contract
 
@@ -73,7 +73,7 @@ OAR = OraclizeAddrResolverI(0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475);
 ### Oraclize endpoint
 The below line
 ```
-oraclize_query("URL", "json(https://wqy7ols8ob.execute-api.eu-central-1.amazonaws.com/prod/CryptoRunTest).challenge_status");
+oraclize_query("URL", "json(https://pgy2ax76f9.execute-api.eu-central-1.amazonaws.com/test/CryptoRunTest).challenge_status");
 ```
 must be replaced by
 ```

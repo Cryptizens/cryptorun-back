@@ -2,9 +2,12 @@ const CryptoRun = artifacts.require('./CryptoRun.sol')
 
 contract('CryptoRun', function ([owner, beCode, donor1, donor2, hacker]) {
   let cryptoRun
+  let cryptoRunAddress
 
-  beforeEach('setup contract for each test', async function () {
+  beforeEach('setup contract and Oracle for each test', async function () {
       cryptoRun = await CryptoRun.new(beCode)
+      cryptoRunAddress = await cryptoRun.address
+      await forceOracleStatus('ongoing')
   })
 
   it('has an owner equal to its deployer', async function () {
@@ -21,32 +24,6 @@ contract('CryptoRun', function ([owner, beCode, donor1, donor2, hacker]) {
 
   it('is initially deployed with a total donations amount equal to 0', async function () {
       assert.equal(await cryptoRun.totalDonation(), 0)
-  })
-
-  it('accepts incoming donations while ONGOING, and does not allow to withdraw them while still ONGOING', async function () {
-      const donation = 1e+18
-      const cryptoRunAddress = await cryptoRun.address
-
-      assert.equal(await cryptoRun.totalDonation(), 0)
-      assert.equal(await cryptoRun.donorDonations(donor1), 0)
-      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
-
-      await cryptoRun.sendTransaction({ value: donation, from: donor1 })
-
-      assert.equal(await cryptoRun.totalDonation(), donation)
-      assert.equal(await cryptoRun.donorDonations(donor1), donation)
-      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
-
-      try {
-          await cryptoRun.withdrawDonorDonation()
-          assert.fail()
-      } catch (error) {
-          assert(error.toString().includes('revert'), error.toString())
-      }
-
-      assert.equal(await cryptoRun.totalDonation(), donation)
-      assert.equal(await cryptoRun.donorDonations(donor1), donation)
-      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
   })
 
   it('can be refreshed by its owner', async function () {
@@ -69,7 +46,7 @@ contract('CryptoRun', function ([owner, beCode, donor1, donor2, hacker]) {
       assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
   })
 
-  it('cannot be refreshed by a Hacker', async function () {
+  it('cannot be refreshed by a hacker', async function () {
       // To be able to query the Oracle, the contract needs some balance
       await cryptoRun.sendTransaction({ value: 1e+18, from: donor1 })
 
@@ -81,86 +58,413 @@ contract('CryptoRun', function ([owner, beCode, donor1, donor2, hacker]) {
       }
   })
 
-  it('successfully updates to ACCOMPLISHED status when challenge is accomplished', async function() {
-    // To be able to query the Oracle, the contract needs some balance
-    await cryptoRun.sendTransaction({ value: 1e+18, from: donor1 })
+  it('cannot be refreshed anymore once ACCOMPLISHED', async function () {
+      // To be able to query the Oracle, the contract needs some balance
+      await cryptoRun.sendTransaction({ value: 1e+18, from: donor1 })
 
-    assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
+      await forceOracleStatus('accomplished')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
 
-    await forceOracleStatus('accomplished')
+      try {
+          await cryptoRun.refreshChallengeStatus()
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
 
-    await cryptoRun.refreshChallengeStatus()
-    await waitForOracleCallback()
-
-    assert.equal(await cryptoRun.challengeStatus(), 'accomplished')
-
-    await forceOracleStatus('ongoing')
+      assert.equal(await cryptoRun.challengeStatus(), 'accomplished')
   })
 
-  it('successfully updates to FAILED status when challenge is failed', async function() {
-    // To be able to query the Oracle, the contract needs some balance
-    await cryptoRun.sendTransaction({ value: 1e+18, from: donor1 })
+  it('cannot be refreshed anymore once FAILED', async function () {
+      // To be able to query the Oracle, the contract needs some balance
+      await cryptoRun.sendTransaction({ value: 1e+18, from: donor1 })
 
-    assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
+      await forceOracleStatus('failed')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
 
-    await forceOracleStatus('failed')
+      try {
+          await cryptoRun.refreshChallengeStatus()
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
 
-    await cryptoRun.refreshChallengeStatus()
-    await waitForOracleCallback()
-
-    assert.equal(await cryptoRun.challengeStatus(), 'failed')
-
-    await forceOracleStatus('ongoing')
+      assert.equal(await cryptoRun.challengeStatus(), 'failed')
   })
 
-  it('correctly executes across its full lifecycle, for the happy path with a successful challenge', async function() {
-    const donation1 = 1e+18
-    const donation2 = 2e+18
-    const totalDonation = donation1 + donation2
-    const cryptoRunAddress = await cryptoRun.address
-    const beCodeBalanceBeforeWithDrawal = web3.eth.getBalance(beCode).toNumber()
+  it('successfully remains in ONGOING status when refreshed if challenge is ongoing', async function() {
+      // To be able to query the Oracle, the contract needs some balance
+      await cryptoRun.sendTransaction({ value: 1e+18, from: donor1 })
 
-    await cryptoRun.sendTransaction({ value: donation1, from: donor1 })
-    await cryptoRun.sendTransaction({ value: donation2, from: donor2 })
+      assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
 
-    assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
-    assert.equal(await cryptoRun.totalDonation(), totalDonation)
-    assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), totalDonation)
+      await forceOracleStatus('ongoing')
 
-    await forceOracleStatus('accomplished')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
 
-    await cryptoRun.refreshChallengeStatus()
-    await waitForOracleCallback()
-
-    assert.equal(await cryptoRun.challengeStatus(), 'accomplished')
-
-    await cryptoRun.withDrawAllDonations()
-
-    assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
-    assert.equal(web3.eth.getBalance(beCode).toNumber(), beCodeBalanceBeforeWithDrawal + totalDonation)
-
-    assert.equal(await cryptoRun.challengeStatus(), 'closed')
-
-    await forceOracleStatus('ongoing')
+      assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
   })
+
+  it('successfully updates to ACCOMPLISHED status when refreshed if challenge is accomplished', async function() {
+      // To be able to query the Oracle, the contract needs some balance
+      await cryptoRun.sendTransaction({ value: 1e+18, from: donor1 })
+
+      assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
+
+      await forceOracleStatus('accomplished')
+
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      assert.equal(await cryptoRun.challengeStatus(), 'accomplished')
+  })
+
+  it('successfully updates to FAILED status when refreshed if challenge is failed', async function() {
+      // To be able to query the Oracle, the contract needs some balance
+      await cryptoRun.sendTransaction({ value: 1e+18, from: donor1 })
+
+      assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
+
+      await forceOracleStatus('failed')
+
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      assert.equal(await cryptoRun.challengeStatus(), 'failed')
+  })
+
+  it('accepts incoming donations when ONGOING', async function () {
+      const donation = 1e+18
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+  })
+
+  it('does not accept incoming donations when ACCOMPLISHED', async function () {
+      const donation = 1e+18
+      const donor1BalanceBeforeDonation = web3.eth.getBalance(donor1).toNumber()
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await forceOracleStatus('accomplished')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      try {
+          await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+  })
+
+  it('does not accept incoming donations when FAILED', async function () {
+      const donation = 1e+18
+      const donor1BalanceBeforeDonation = web3.eth.getBalance(donor1).toNumber()
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await forceOracleStatus('failed')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      try {
+          await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+  })
+
+  it('does not allow to withdraw individual donations when ONGOING', async function () {
+      const donation = 1e+18
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+
+      try {
+          await cryptoRun.withdrawDonorDonation({ from: donor1 })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+  })
+
+  it('does not allow to withdraw individual donations when ACCOMPLISHED', async function () {
+      const donation = 1e+18
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+
+      await forceOracleStatus('accomplished')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      try {
+          await cryptoRun.withdrawDonorDonation({ from: donor1 })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+  })
+
+  it('does not allow a hacker to withdraw all donations when ACCOMPLISHED', async function () {
+      const donation = 1e+18
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+
+      await forceOracleStatus('accomplished')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      try {
+          await cryptoRun.withDrawAllDonations({ from: hacker })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+  })
+
+  it('does not allow a donor to withdraw all donations when ACCOMPLISHED', async function () {
+      const donation = 1e+18
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+
+      await forceOracleStatus('accomplished')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      try {
+          await cryptoRun.withDrawAllDonations({ from: donor1 })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+  })
+
+  it('does not allow BeCode to withdraw all donations when FAILED', async function () {
+      const donation = 1e+18
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+
+      await forceOracleStatus('failed')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      try {
+          await cryptoRun.withDrawAllDonations({ from: beCode })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+  })
+
+  it('does not allow the owner to withdraw all donations when FAILED', async function () {
+      const donation = 1e+18
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+
+      await forceOracleStatus('failed')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      try {
+          await cryptoRun.withDrawAllDonations({ from: owner })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.totalDonation(), donation)
+      assert.equal(await cryptoRun.donorDonations(donor1), donation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), donation)
+  })
+
+  it('correctly executes across its full lifecycle, for a successful challenge scenario', async function() {
+      const donation1 = 1e+18
+      const donation2 = 2e+18
+      const totalDonation = donation1 + donation2
+      const beCodeBalanceBeforeWithDrawal = web3.eth.getBalance(beCode).toNumber()
+
+      await cryptoRun.sendTransaction({ value: donation1, from: donor1 })
+      await cryptoRun.sendTransaction({ value: donation2, from: donor2 })
+
+      assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
+      assert.equal(await cryptoRun.totalDonation(), totalDonation)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), totalDonation)
+
+      await forceOracleStatus('accomplished')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      assert.equal(await cryptoRun.challengeStatus(), 'accomplished')
+
+      await cryptoRun.withDrawAllDonations()
+
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+      assert.equal(web3.eth.getBalance(beCode).toNumber(), beCodeBalanceBeforeWithDrawal + totalDonation)
+
+      assert.equal(await cryptoRun.challengeStatus(), 'accomplished')
+  })
+
+  it('correctly executes across its full lifecycle, for a failed challenge scenario', async function () {
+      const donation1 = 1e+18
+      const donation2 = 2e+18
+      const totalDonor1Donation = donation1 + donation2
+
+      const donation3 = 1e+17
+      const totalDonor2Donation = donation3
+
+      const totalDonorsDonation = totalDonor1Donation + totalDonor2Donation
+
+      const donor1BalanceBeforeDonation = web3.eth.getBalance(donor1).toNumber()
+      const donor2BalanceBeforeDonation = web3.eth.getBalance(donor2).toNumber()
+
+      const donationReceipt1 = await cryptoRun.sendTransaction({ value: donation1, from: donor1 })
+      const donationReceipt2 = await cryptoRun.sendTransaction({ value: donation2, from: donor1 })
+      const donationReceipt3 = await cryptoRun.sendTransaction({ value: donation3, from: donor2 })
+
+      assert.equal(await cryptoRun.donorDonations(donor1), totalDonor1Donation)
+      assert.equal(await cryptoRun.donorDonations(donor2), totalDonor2Donation)
+      assert.equal(await cryptoRun.totalDonation(), totalDonorsDonation)
+
+      await forceOracleStatus('failed')
+      await cryptoRun.refreshChallengeStatus()
+      await waitForOracleCallback()
+
+      const withdrawalReceipt1 = await cryptoRun.withdrawDonorDonation({ from: donor1 })
+      const withdrawalReceipt2 = await cryptoRun.withdrawDonorDonation({ from: donor2 })
+
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      const donationTransactionCost1 = await getTransactionCost(donationReceipt1)
+      const donationTransactionCost2 = await getTransactionCost(donationReceipt2)
+      const donationTransactionCost3 = await getTransactionCost(donationReceipt3)
+
+      const withdrawalTransactionCost1 = await getTransactionCost(withdrawalReceipt1)
+      const withdrawalTransactionCost2 = await getTransactionCost(withdrawalReceipt2)
+
+      assert.equal(web3.eth.getBalance(donor1).toNumber(), donor1BalanceBeforeDonation - donationTransactionCost1 - donationTransactionCost2 - withdrawalTransactionCost1)
+      assert.equal(web3.eth.getBalance(donor2).toNumber(), donor2BalanceBeforeDonation - donationTransactionCost3 - withdrawalTransactionCost2)
+  })
+
+  /*
+   * Helper to get the cost of a transaction - note that we need to gather
+   * the necessary input for calculation from 2 different sources...
+  */
+  async function getTransactionCost(receipt) {
+    const gasUsed = receipt.receipt.gasUsed
+    const tx = await web3.eth.getTransaction(receipt.tx)
+    const gasPrice = tx.gasPrice
+
+    return gasUsed * gasPrice
+  }
 
   /*
    * Helper to wait for Oracle callback
   */
   async function waitForOracleCallback() {
-    await promisifyLogWatch(cryptoRun.ChallengeStatusRefreshed({ fromBlock: 'latest' }))
+      await promisifyLogWatch(cryptoRun.ChallengeStatusRefreshed({ fromBlock: 'latest' }))
   }
 
   /*
-  * Helper method to remotely update the test Oracle endpoint
+  * Helper to remotely update the test Oracle endpoint
   */
   async function forceOracleStatus(status) {
-    const util = require('util')
-    const exec = util.promisify(require('child_process').exec)
+      const util = require('util')
+      const exec = util.promisify(require('child_process').exec)
 
-    const awsCliCommand = 'aws lambda update-function-configuration --profile cryptizens-lambdas-deployer --function-name CryptoRunTest --environment Variables={status=' + status + '}'
+      const awsCliCommand = 'aws lambda update-function-configuration --profile cryptizens-lambdas-deployer --function-name CryptoRunTest --environment Variables={status=' + status + '}'
 
-    const { stdout, stderr } = await exec(awsCliCommand)
+      const { stdout, stderr } = await exec(awsCliCommand)
   }
 
   /*

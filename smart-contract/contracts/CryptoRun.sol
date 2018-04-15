@@ -17,7 +17,7 @@ contract CryptoRun is usingOraclize {
   // Setup at contract construction.
   address public beCodeAddress;
   // The status of the challenge, initialized at deployment to 'ongoing'.
-  // Other statuses are 'accomplished', 'closed' and 'failed'
+  // Other statuses are 'accomplished' and 'failed'
   string public challengeStatus = 'ongoing';
   // Another interesting variable here is the actual amount of funds that are
   // locked on the contract after donation. In normal contracts, this variable
@@ -50,8 +50,8 @@ contract CryptoRun is usingOraclize {
   event ChallengeOngoing();
   // The challenge has been accomplished
   event ChallengeAccomplished();
-  // The challenge has been closed (after all donations have been withdrawn)
-  event ChallengeClosed();
+  // The challenge is over (after all donations have been withdrawn)
+  event ChallengeOver();
   // The challenge has failed
   event ChallengeFailed();
   // The funds are available for BeCode to withdraw them (will only be broadcast
@@ -63,7 +63,9 @@ contract CryptoRun is usingOraclize {
   // if the challenge has failed)
   event DonationsAvailableForDonorsWithdrawal(uint totalDonation);
   // One of the donors has withdrawn their funds
-  event DonationWithdrawnByDonor(address donorAddress, uint donorDonation);
+  event DonationWithdrawnByDonor(address donorAddress, uint withdrawnAmount);
+  // The last donor withdrew their funds
+  event LastDonationWithdrawnByDonor(address donorAddress, uint withdrawnAmount);
   // Oraclize technical event
   event NewOraclizeQuery(string description);
   event NewOraclizeCallback(bytes32 _queryId);
@@ -79,7 +81,7 @@ contract CryptoRun is usingOraclize {
   // For functions that can only be executed by the Oracle (the address method
   // in the assertion is inherited from the usingOraclize parent contract)
   modifier onlyByOracle {
-      require (msg.sender == oraclize_cbAddress());
+      require(msg.sender == oraclize_cbAddress());
       _;
   }
   // For functions that can only be executed when the challenge is ongoing
@@ -105,7 +107,7 @@ contract CryptoRun is usingOraclize {
   */
   // The constructor functions, called when the contract is deployed
   function CryptoRun(address _beCodeAddress) public {
-    // For testing purposes only
+    // The OAR variable assignment is for testing purposes only
     OAR = OraclizeAddrResolverI(0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475);
     beCodeAddress = _beCodeAddress;
     emit ChallengeStarted(msg.sender);
@@ -137,7 +139,7 @@ contract CryptoRun is usingOraclize {
         // Production endpoint
         // oraclize_query("URL", "json(https://pgy2ax76f9.execute-api.eu-central-1.amazonaws.com/prod/CryptoRun).challenge_status");
         // Test endpoint
-        oraclize_query("URL", "json(https://wqy7ols8ob.execute-api.eu-central-1.amazonaws.com/prod/CryptoRunTest).challenge_status");
+        oraclize_query("URL", "json(https://pgy2ax76f9.execute-api.eu-central-1.amazonaws.com/test/CryptoRunTest).challenge_status");
     }
   }
 
@@ -170,11 +172,9 @@ contract CryptoRun is usingOraclize {
   // be triggered automatically by the contract), as it is known to be much
   // safer (cf. Solidity documentation)
   function withDrawAllDonations() public onlyByOrganizers onlyWhenAccomplished {
-    // Close the challenge
-    challengeStatus = 'closed';
-    // Broadcast the closing and withdrawal events
+    // Broadcast withdrawal and closing events
     emit DonationWithdrawnByBeCode(msg.sender, address(this).balance);
-    emit ChallengeClosed();
+    emit ChallengeOver();
     // Transfer the remaning contract balance to BeCode
     beCodeAddress.transfer(address(this).balance);
   }
@@ -186,8 +186,6 @@ contract CryptoRun is usingOraclize {
     uint donation = donorsDonations[msg.sender];
     // Set this amount to zero
     donorsDonations[msg.sender] = 0;
-    // Broadcast the withdrawal event
-    emit DonationWithdrawnByDonor(msg.sender, donation);
     // Transfer the funds to the individual donor. Note that the very last donor
     // to withdraw her funds will meet a contract balance that is lower than
     // the funds she will have contributed. This is because the balance has
@@ -195,11 +193,16 @@ contract CryptoRun is usingOraclize {
     // To ensure that the donor can still get this remaining balance, we use
     // a little conditional flow here. Otherwise we would end up trying to
     // transfer an amount greater than the balance and it would trigger an
-    // error, thereby actually locking the funds on the contract!
-    if (address(this).balance > donation) {
+    // error, thereby actually locking the funds on the contract
+    uint remainingBalance = address(this).balance;
+    if (remainingBalance > donation) {
+      // Broadcast the withdrawal event
+      emit DonationWithdrawnByDonor(msg.sender, donation);
       msg.sender.transfer(donation);
     } else {
-      msg.sender.transfer(address(this).balance);
+      // Broadcast the withdrawal event
+      emit LastDonationWithdrawnByDonor(msg.sender, remainingBalance);
+      msg.sender.transfer(remainingBalance);
     }
   }
 
