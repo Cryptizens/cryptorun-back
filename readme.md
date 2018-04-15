@@ -52,7 +52,7 @@ import "./usingOraclize.sol";
 ```
 must be replaced by
 ```
-import "github.com/oraclize/ethereum-api/oraclizeAPI.sol"; */
+import "github.com/oraclize/ethereum-api/oraclizeAPI.sol";
 ```
 
 ### OAR in the constructor
