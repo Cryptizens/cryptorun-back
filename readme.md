@@ -17,6 +17,9 @@ The smart contract lives at address xxxx, it can be consulted [here on Etherscan
 ### Oracle (Strava connection)
 The Oracle in charge of connecting with Strava runs on AWS Lambda with a Python 2.7 runtime.
 
+### Test Oracle
+A exceedingly simple dummy Oracle for the Truffle test suite. This Lambda has the same interface as the real Oracle, but the status that it returns can easily be switched as it is read from an environment variable. We use the aws-cli to directly update this environment variable during the tests, to fake the evolution of the challenge status. 
+
 ## Testing the smart contract
 
 We use Truffle to perform all tests. Once you're done with the below setup, just run `truffle test test/cryptoRun.js` and enjoy the show.
