@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity 0.4.21;
 
 // Import the Oraclize contract code so we can inherit from it
 // Note that in our local test environment, we need to import the .sol file
@@ -36,70 +36,80 @@ contract CryptoRun is usingOraclize {
   // Keep track of all individual donations, so that donors can withdraw their
   // funds if the challenge fails
   mapping (address => uint) public donorsDonations;
+  // Pausable behavior state
+  bool public paused = false;
 
   /*
       EVENTS - for broadcasting a set of logs that we can listen to
   */
   // The contract has been deployed, and the challenge can start
-  event ChallengeStarted(address deployerAddress);
+  event LogChallengeStarted(address deployerAddress);
   // A new donor has contributed by sending funds
-  event NewDonation(address donorAddress, uint donationAmount, uint totalDonation);
+  event LogNewDonation(address donorAddress, uint donationAmount, uint totalDonation);
   // The challenge status has been refreshed
-  event ChallengeStatusRefreshed(string latestStatus);
+  event LogChallengeStatusRefreshed(string latestStatus);
   // The challenge is still ongoing
-  event ChallengeOngoing();
+  event LogChallengeOngoing();
   // The challenge has been accomplished
-  event ChallengeAccomplished();
+  event LogChallengeAccomplished();
   // The challenge is over (after all donations have been withdrawn)
-  event ChallengeOver();
+  event LogChallengeOver();
   // The challenge has failed
-  event ChallengeFailed();
+  event LogChallengeFailed();
   // The funds are available for BeCode to withdraw them (will only be broadcast
   // if the challenge is successful)
-  event DonationAvailableForBeCodeWithdrawal(uint totalDonation);
+  event LogDonationAvailableForBeCodeWithdrawal(uint totalDonation);
   // BeCode has withdrawn the funds
-  event DonationWithdrawnByBeCode(address beCodeAddress, uint totalDonation);
+  event LogDonationWithdrawnByBeCode(address beCodeAddress, uint totalDonation);
   // The funds are available for the donors to withdraw (will only be broadcast
   // if the challenge has failed)
-  event DonationsAvailableForDonorsWithdrawal(uint totalDonation);
+  event LogDonationsAvailableForDonorsWithdrawal(uint totalDonation);
   // One of the donors has withdrawn their funds
-  event DonationWithdrawnByDonor(address donorAddress, uint withdrawnAmount);
+  event LogDonationWithdrawnByDonor(address donorAddress, uint withdrawnAmount);
   // The last donor withdrew their funds
-  event LastDonationWithdrawnByDonor(address donorAddress, uint withdrawnAmount);
+  event LogLastDonationWithdrawnByDonor(address donorAddress, uint withdrawnAmount);
+  // Pausable behavior
+  event LogPause();
+  event LogUnpause();
   // Oraclize technical event
-  event NewOraclizeQuery(string description);
-  event NewOraclizeCallback(bytes32 _queryId);
+  event LogNewOraclizeQuery(string description);
+  event LogNewOraclizeCallback(bytes32 _queryId);
 
   /*
       FUNCTION MODIFIERS - to set specific permissions for contract functions
   */
   // For functions that can only be executed either the owner or by BeCode
-  modifier onlyByOrganizers {
+  modifier onlyOrganizers {
       require((msg.sender == ownerAddress) || (msg.sender == beCodeAddress));
       _;
   }
   // For functions that can only be executed by the Oracle (the address method
   // in the assertion is inherited from the usingOraclize parent contract)
-  modifier onlyByOracle {
+  modifier onlyOracle {
       require(msg.sender == oraclize_cbAddress());
       _;
   }
   // For functions that can only be executed when the challenge is ongoing
   // Note that pure string comparison is not yet supported in Solidity and
   // one has to hash them first then compare their hashes
-  modifier onlyWhenOngoing {
+  modifier whenOngoing {
       require(keccak256(challengeStatus) == keccak256('ongoing'));
       _;
   }
   // For functions that can only be executed when the challenge is accomplished
-  modifier onlyWhenAccomplished {
+  modifier whenAccomplished {
       require(keccak256(challengeStatus) == keccak256('accomplished'));
       _;
   }
   // For functions that can only be executed when the challenge is failed
-  modifier onlyWhenFailed {
+  modifier whenFailed {
       require(keccak256(challengeStatus) == keccak256('failed'));
       _;
+  }
+  // Pausable behavior - we implement only the not paused modifier
+  modifier whenNotPaused() {
+    require(!paused);
+    _;
   }
 
   /*
@@ -110,32 +120,31 @@ contract CryptoRun is usingOraclize {
     // The OAR variable assignment is for testing purposes only
     OAR = OraclizeAddrResolverI(0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475);
     beCodeAddress = _beCodeAddress;
-    emit ChallengeStarted(msg.sender);
+    emit LogChallengeStarted(msg.sender);
   }
 
   // The fallback function called anytime someone sends value to the contract
   // This is the 'donate()' function. But we cannot call it donate() because
   // we need a nameless function to be able to send Ether directly from any
   // wallet without having to know about the contract interface.
-  function () public payable onlyWhenOngoing {
-    // Add the individual donor balance
-    uint currentDonorDonation = donorsDonations[msg.sender];
-    donorsDonations[msg.sender] = currentDonorDonation + msg.value;
+  function () public payable whenOngoing whenNotPaused {
+    require(msg.value > 0);
+    // Increase the individual donor balance
+    donorsDonations[msg.sender] += msg.value;
     // Increase the total funds donated
-    uint currentTotalDonation = totalDonation;
-    totalDonation = currentTotalDonation + msg.value;
+    totalDonation += msg.value;
     // Log the donation, along with the new total value of funds donated
-    emit NewDonation(msg.sender, msg.value, totalDonation);
+    emit LogNewDonation(msg.sender, msg.value, totalDonation);
   }
 
   // The querying function that will trigger the Oracle to check whether the
   // challenge has been accomplished
-  function refreshChallengeStatus() public onlyByOrganizers onlyWhenOngoing {
+  function refreshChallengeStatus() public onlyOrganizers whenOngoing {
     // Call to the Oraclize API
     if (oraclize_getPrice("URL") > address(this).balance) {
-        emit NewOraclizeQuery("Oraclize query NOT sent, balance too low");
+        emit LogNewOraclizeQuery("Oraclize query NOT sent, balance too low");
     } else {
-        emit NewOraclizeQuery("Oraclize query sent, standing by...");
+        emit LogNewOraclizeQuery("Oraclize query sent, standing by...");
         // Production endpoint
         // oraclize_query("URL", "json(https://pgy2ax76f9.execute-api.eu-central-1.amazonaws.com/prod/CryptoRun).challenge_status");
         // Test endpoint
@@ -145,23 +154,23 @@ contract CryptoRun is usingOraclize {
 
   // The callback function that will be invoked by the Oracle after it has
   // fetched the latest challenge status
-  function __callback(bytes32 _queryId, string _result) public onlyByOracle {
+  function __callback(bytes32 _queryId, string _result) public onlyOracle {
     // Assert whether success or not, and update contract state accordingly
     string memory latestStatus = _result;
 
-    emit NewOraclizeCallback(_queryId);
-    emit ChallengeStatusRefreshed(latestStatus);
+    emit LogNewOraclizeCallback(_queryId);
+    emit LogChallengeStatusRefreshed(latestStatus);
 
     if (keccak256(latestStatus) == keccak256('ongoing')) {
       challengeStatus = 'ongoing';
-      emit ChallengeOngoing();
+      emit LogChallengeOngoing();
     } else if (keccak256(latestStatus) == keccak256('accomplished')) {
       challengeStatus = 'accomplished';
-      emit ChallengeAccomplished();
-      emit DonationAvailableForBeCodeWithdrawal(totalDonation);
+      emit LogChallengeAccomplished();
+      emit LogDonationAvailableForBeCodeWithdrawal(totalDonation);
     } else if (keccak256(latestStatus) == keccak256('failed')) {
       challengeStatus = 'failed';
-      emit ChallengeFailed();
+      emit LogChallengeFailed();
     } else {
       revert();
     }
@@ -171,17 +180,17 @@ contract CryptoRun is usingOraclize {
   // here (the transfer must be triggered by the funds claimer, and will not
   // be triggered automatically by the contract), as it is known to be much
   // safer (cf. Solidity documentation)
-  function withDrawAllDonations() public onlyByOrganizers onlyWhenAccomplished {
+  function withDrawAllDonations() public onlyOrganizers whenAccomplished {
     // Broadcast withdrawal and closing events
-    emit DonationWithdrawnByBeCode(msg.sender, address(this).balance);
-    emit ChallengeOver();
+    emit LogDonationWithdrawnByBeCode(msg.sender, address(this).balance);
+    emit LogChallengeOver();
     // Transfer the remaning contract balance to BeCode
     beCodeAddress.transfer(address(this).balance);
   }
 
   // The individual donors withdrawal functions (so that they can withdraw
   // their value if the challenge is a failure)
-  function withdrawDonorDonation() public onlyWhenFailed {
+  function withdrawDonorDonation() public whenFailed {
     // Retrieve the amount already contributed
     uint donation = donorsDonations[msg.sender];
     // Set this amount to zero
@@ -197,11 +206,11 @@ contract CryptoRun is usingOraclize {
     uint remainingBalance = address(this).balance;
     if (remainingBalance > donation) {
       // Broadcast the withdrawal event
-      emit DonationWithdrawnByDonor(msg.sender, donation);
+      emit LogDonationWithdrawnByDonor(msg.sender, donation);
       msg.sender.transfer(donation);
     } else {
       // Broadcast the withdrawal event
-      emit LastDonationWithdrawnByDonor(msg.sender, remainingBalance);
+      emit LogLastDonationWithdrawnByDonor(msg.sender, remainingBalance);
       msg.sender.transfer(remainingBalance);
     }
   }
@@ -209,5 +218,17 @@ contract CryptoRun is usingOraclize {
   // Get the current donation for a given donor address
   function donorDonations(address _donorAddress) public constant returns(uint) {
     return donorsDonations[_donorAddress];
+  }
+
+  // Pause the donations (fallback payable function)
+  function pause() onlyOrganizers whenNotPaused public {
+    paused = true;
+    emit LogPause();
+  }
+
+  // Unpause the donations (fallback payable function)
+  function unpause() onlyOrganizers public {
+    paused = false;
+    emit LogUnpause();
   }
 }

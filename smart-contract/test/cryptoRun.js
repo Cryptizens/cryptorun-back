@@ -22,6 +22,10 @@ contract('CryptoRun', function ([owner, beCode, donor1, donor2, hacker]) {
       assert.equal(await cryptoRun.challengeStatus(), 'ongoing')
   })
 
+  it('is initially deployed in an unpaused state', async function () {
+      assert.equal(await cryptoRun.paused(), false)
+  })
+
   it('is initially deployed with a total donations amount equal to 0', async function () {
       assert.equal(await cryptoRun.totalDonation(), 0)
   })
@@ -56,6 +60,61 @@ contract('CryptoRun', function ([owner, beCode, donor1, donor2, hacker]) {
       } catch (error) {
           assert(error.toString().includes('revert'), error.toString())
       }
+  })
+
+  it('can be paused by its owner', async function () {
+      assert.equal(await cryptoRun.paused(), false)
+      await cryptoRun.pause()
+      assert.equal(await cryptoRun.paused(), true)
+  })
+
+  it('can be paused by BeCode', async function () {
+      assert.equal(await cryptoRun.paused(), false)
+      await cryptoRun.pause({ from: beCode })
+      assert.equal(await cryptoRun.paused(), true)
+  })
+
+  it('cannot be paused by a hacker', async function () {
+      assert.equal(await cryptoRun.paused(), false)
+
+      try {
+          await cryptoRun.pause({ from: hacker })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.paused(), false)
+  })
+
+  it('can be unpaused by its owner', async function () {
+      await cryptoRun.pause()
+      assert.equal(await cryptoRun.paused(), true)
+
+      await cryptoRun.unpause()
+      assert.equal(await cryptoRun.paused(), false)
+  })
+
+  it('can be unpaused by BeCode', async function () {
+      await cryptoRun.pause({ from: beCode })
+      assert.equal(await cryptoRun.paused(), true)
+
+      await cryptoRun.unpause({ from: beCode })
+      assert.equal(await cryptoRun.paused(), false)
+  })
+
+  it('cannot be unpaused by a hacker', async function () {
+      await cryptoRun.pause()
+      assert.equal(await cryptoRun.paused(), true)
+
+      try {
+          await cryptoRun.pause({ from: hacker })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.paused(), true)
   })
 
   it('cannot be refreshed anymore once ACCOMPLISHED', async function () {
@@ -185,6 +244,29 @@ contract('CryptoRun', function ([owner, beCode, donor1, donor2, hacker]) {
       await forceOracleStatus('failed')
       await cryptoRun.refreshChallengeStatus()
       await waitForOracleCallback()
+
+      try {
+          await cryptoRun.sendTransaction({ value: donation, from: donor1 })
+          assert.fail()
+      } catch (error) {
+          assert(error.toString().includes('revert'), error.toString())
+      }
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+  })
+
+  it('does not accept incoming donations when paused', async function () {
+      const donation = 1e+18
+      const donor1BalanceBeforeDonation = web3.eth.getBalance(donor1).toNumber()
+
+      assert.equal(await cryptoRun.totalDonation(), 0)
+      assert.equal(await cryptoRun.donorDonations(donor1), 0)
+      assert.equal(web3.eth.getBalance(cryptoRunAddress).toNumber(), 0)
+
+      await cryptoRun.pause()
+      assert.equal(await cryptoRun.paused(), true)
 
       try {
           await cryptoRun.sendTransaction({ value: donation, from: donor1 })
@@ -452,7 +534,7 @@ contract('CryptoRun', function ([owner, beCode, donor1, donor2, hacker]) {
    * Helper to wait for Oracle callback
   */
   async function waitForOracleCallback() {
-      await promisifyLogWatch(cryptoRun.ChallengeStatusRefreshed({ fromBlock: 'latest' }))
+      await promisifyLogWatch(cryptoRun.LogChallengeStatusRefreshed({ fromBlock: 'latest' }))
   }
 
   /*

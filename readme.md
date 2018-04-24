@@ -4,7 +4,9 @@ This is the back-end engine of the [Cryptorun challenge](https://cryptorun.bruss
 
 The catch: funds will be collected in crypto-currency using ETH, and the GPS of Thomas will be connected to the Blockchain!
 
-You can find detailed explanation of the code behind this challenge on this [general blog article](#). Please also consult this [blog article dedicated to testing](#) of the contract.
+You can find detailed explanation of the code behind this challenge on this [general blog article](https://medium.com/@vanderstraeten.thomas/a-crypto-fundraising-for-a-charity-on-the-ethereum-net-with-a-strava-gps-oracle-8a24167c1dad). Please also consult this [blog article dedicated to testing](https://medium.com/@vanderstraeten.thomas/testing-the-cryptorun-smart-contract-a-tale-of-obsessive-perfection-84ded25f1636) of the contract.
+
+Special thanks to [Hannes](https://github.com/jebuske) for his kind review and suggestions!
 
 ## Architecture
 
@@ -45,7 +47,7 @@ Wait for the bridge to load (long and verbose). After it's done, it should instr
 ```
 OAR = OraclizeAddrResolverI(0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475);
 ```
-Note that the actual address might vary.
+Note that the actual address might vary. Sometimes there might be issue with the Bridge warning that it has already see specific Tx IDs - this is due to incompatibilites with latest solc versions. In that case just delete everything within the ethereum-bridge/database/tingodb folder.
 
 ### Setting up AWS
 Make sure you have the correct access rights to modify the test Lambda for the Oracle - this will be needed for the forced refreshed during the tests.
