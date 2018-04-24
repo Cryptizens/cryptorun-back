@@ -108,7 +108,7 @@ contract('CryptoRun', function ([owner, beCode, donor1, donor2, hacker]) {
       assert.equal(await cryptoRun.paused(), true)
 
       try {
-          await cryptoRun.pause({ from: hacker })
+          await cryptoRun.unpause({ from: hacker })
           assert.fail()
       } catch (error) {
           assert(error.toString().includes('revert'), error.toString())
