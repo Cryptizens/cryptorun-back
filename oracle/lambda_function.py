@@ -42,19 +42,6 @@ LAST_CHALLENGE_DAY = datetime(2018, 5, 30)
 # The minimum distance that must be run for the challenge to be accomplished,
 # expressed in meters (Strava's reference unit for distances).
 MIN_DISTANCE = 60000
-# Dry-run area: Trail du Grand Ballon
-# Rimbach-pres-Masevaux
-# https://www.google.be/maps/place/68290+Rimbach-pres-Masevaux,+France/@47.8339508,6.9083031,13z/data=!3m1!4b1!4m13!1m7!3m6!1s0x4793d269d6ca436b:0x40a5fb99a393bc0!2sFellering,+France!3b1!8m2!3d47.8960579!4d6.986731!3m4!1s0x47922d79d77fbcf9:0x40a5fb99a393040!8m2!3d47.8255456!4d6.9505692?hl=en
-SW_BOUND_COORDS = {
-    'lat': 47.00,
-    'lon': 6.5
-}
-# Wasserbourg
-# https://www.google.be/maps/place/Wasserbourg,+France/@47.9963003,7.138305,14z/data=!3m1!4b1!4m13!1m7!3m6!1s0x4793d269d6ca436b:0x40a5fb99a393bc0!2sFellering,+France!3b1!8m2!3d47.8960579!4d6.986731!3m4!1s0x4793d7dd8f33a081:0x40a5fb99a392b30!8m2!3d48.0032468!4d7.1603394?hl=en
-NE_BOUND_COORDS = {
-    'lat': 49.00,
-    'lon': 7.5
-}
 # The geographical areas within which the challenge must happen. We choose a broad
 # square around the Brussels region, that is bound by Sint-Pieters-Leeuw in the
 # South-West, and by Perk in the North-East. Check out on Google Map how these
@@ -63,16 +50,16 @@ NE_BOUND_COORDS = {
 # end points of the activity must be within this broad square.
 # (1) Sint-Pieters-Leeuw
 # https://www.google.be/maps/place/Sint-Pieters-Leeuw/@50.7886091,4.2083307,13z/data=!3m1!4b1!4m5!3m4!1s0x47c30fa9e98924bf:0x7e72a8992628f7ff!8m2!3d50.7797834!4d4.2436409?hl=en
-# SW_BOUND_COORDS = {
-#     'lat': 50.7886091,
-#     'lon': 4.2083307
-# }
+SW_BOUND_COORDS = {
+    'lat': 50.7886091,
+    'lon': 4.2083307
+}
 # (2) Perk
 # https://www.google.be/maps/place/1820+Perk/@50.9348927,4.4871652,15z/data=!3m1!4b1!4m5!3m4!1s0x47c3e767208ad4a1:0xb43ba0a4fd98a073!8m2!3d50.9348491!4d4.4959831?hl=en
-# NE_BOUND_COORDS = {
-#     'lat': 50.9348927,
-#     'lon': 4.4871652
-# }
+NE_BOUND_COORDS = {
+    'lat': 50.9348927,
+    'lon': 4.4871652
+}
 # (3) Resulting authorized ranges
 AUTHORIZED_LAT_RANGE  = [ SW_BOUND_COORDS['lat'], NE_BOUND_COORDS['lat']]
 AUTHORIZED_LON_RANGE = [ SW_BOUND_COORDS['lon'], NE_BOUND_COORDS['lon']]

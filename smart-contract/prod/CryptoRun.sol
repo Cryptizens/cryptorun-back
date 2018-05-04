@@ -139,6 +139,7 @@ contract CryptoRun is usingOraclize {
         emit LogNewOraclizeQuery("Oraclize query NOT sent, balance too low");
     } else {
         emit LogNewOraclizeQuery("Oraclize query sent, standing by...");
+        // Production endpoint
         oraclize_query("URL", "json(https://pgy2ax76f9.execute-api.eu-central-1.amazonaws.com/prod/CryptoRun).challenge_status");
     }
   }
