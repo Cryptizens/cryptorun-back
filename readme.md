@@ -1,5 +1,7 @@
 # Cryptorun Back
 
+[UPDATE: the challenge is over! 65KM have been run, and 1.85 ETH have been collected :) Thanks to all!]
+
 This is the back-end engine of the [Cryptorun challenge](https://cryptorun.brussels). The goal of this challenge is for Thomas Vanderstraeten to run 60km around Brussels to raise funds and awareness for BeCode.
 
 The catch: funds will be collected in crypto-currency using ETH, and the GPS of Thomas will be connected to the Blockchain!
@@ -14,7 +16,7 @@ Special thanks to [Hannes](https://github.com/jebuske) for his kind review and s
 ![alt text](https://s3.eu-central-1.amazonaws.com/cryptorun.be/cryptorun-architecture.png "Back-end architecture")
 
 ### Smart contract
-The smart contract lives at address xxxx, it can be consulted [here on Etherscan](https://etherscan.io/).
+The smart contract lives at address 0x7ad38438b15338f6d1846961903055ada6fff054, it can be consulted [here on Etherscan](https://etherscan.io/address/0x7ad38438b15338f6d1846961903055ada6fff054). NOTE THAT IT IS NOW CLOSED TO ANY DONATIONS!
 
 ### Oracle (Strava connection)
 The Oracle in charge of connecting with Strava runs on AWS Lambda with a Python 2.7 runtime.
